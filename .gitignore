@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.db
+*.opendb
+*.cache
+TestResults/
+.DS_Store
+.env
+.venv/
+data/exports/
