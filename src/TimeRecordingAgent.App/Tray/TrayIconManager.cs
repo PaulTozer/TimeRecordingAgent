@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -11,6 +13,7 @@ using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
+using TimeRecordingAgent.App.Dialogs;
 using TimeRecordingAgent.App.History;
 using TimeRecordingAgent.Core.Models;
 using TimeRecordingAgent.Core.Services;
@@ -25,10 +28,16 @@ public sealed class TrayIconManager : IDisposable
     private readonly string _dataDirectory;
     private readonly NotifyIcon _notifyIcon;
     private readonly ToolStripMenuItem _toggleItem;
+    private readonly ToolStripMenuItem _promptToggleItem;
     private readonly DispatcherTimer _clockTimer;
+    private readonly DispatcherTimer _taskPromptTimer;
+    private readonly HashSet<string> _promptedDocuments = new(StringComparer.OrdinalIgnoreCase);
+    private readonly TimeSpan _promptThreshold = TimeSpan.FromMinutes(5);
     private HistoryWindow? _historyWindow;
     private Icon? _clockIcon;
     private bool _disposed;
+    private bool _taskPromptEnabled = true;
+    private string? _currentTrackedDocument;
 
     public TrayIconManager(RecordingCoordinator coordinator, ILogger<TrayIconManager> logger, string databasePath)
     {
@@ -45,17 +54,29 @@ public sealed class TrayIconManager : IDisposable
         };
 
         _toggleItem = new ToolStripMenuItem("Pause Recording", null, (_, _) => ToggleRecording());
+        _promptToggleItem = new ToolStripMenuItem("Task Prompts Enabled", null, (_, _) => ToggleTaskPrompts())
+        {
+            Checked = _taskPromptEnabled
+        };
+        
         _clockTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(30)
         };
         _clockTimer.Tick += HandleClockTick;
+        
+        _taskPromptTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(30)
+        };
+        _taskPromptTimer.Tick += HandleTaskPromptTick;
     }
 
     public void Initialize()
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add(_toggleItem);
+        menu.Items.Add(_promptToggleItem);
         menu.Items.Add(new ToolStripMenuItem("Export Today", null, async (_, _) => await ExportTodayAsync()));
         menu.Items.Add(new ToolStripMenuItem("Open Log Folder", null, (_, _) => OpenLogFolder()));
         menu.Items.Add(new ToolStripSeparator());
@@ -65,11 +86,160 @@ public sealed class TrayIconManager : IDisposable
         _notifyIcon.MouseClick += HandleNotifyIconClick;
         UpdateClockIcon();
         _clockTimer.Start();
+        _taskPromptTimer.Start();
 
         _coordinator.ContextChanged += HandleContextChanged;
         _coordinator.SampleStored += HandleSampleStored;
         _coordinator.Start();
         UpdateTooltip(_coordinator.CurrentContext);
+    }
+
+    private void ToggleTaskPrompts()
+    {
+        _taskPromptEnabled = !_taskPromptEnabled;
+        _promptToggleItem.Checked = _taskPromptEnabled;
+        _logger.LogInformation("Task prompts {State}.", _taskPromptEnabled ? "enabled" : "disabled");
+    }
+
+    private void HandleTaskPromptTick(object? sender, EventArgs e)
+    {
+        if (!_taskPromptEnabled || !_coordinator.IsRunning)
+        {
+            return;
+        }
+
+        CheckAndPromptForTask();
+    }
+
+    private void TrackCurrentDocument(ActiveContextSnapshot? snapshot)
+    {
+        var newDocument = snapshot?.DocumentName;
+        
+        if (string.Equals(_currentTrackedDocument, newDocument, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _currentTrackedDocument = newDocument;
+        _logger.LogTrace("Now tracking document: {Document}", newDocument ?? "(none)");
+    }
+
+    private void CheckAndPromptForTask()
+    {
+        if (_currentTrackedDocument == null)
+        {
+            return;
+        }
+
+        // Skip if already prompted for this document today
+        if (_promptedDocuments.Contains(_currentTrackedDocument))
+        {
+            return;
+        }
+
+        // Check accumulated time from the database instead of continuous time
+        var accumulatedTime = GetAccumulatedTimeToday(_currentTrackedDocument);
+        if (accumulatedTime < _promptThreshold)
+        {
+            return;
+        }
+
+        _logger.LogDebug("Prompting for task classification: {Document} (accumulated {Accumulated})", 
+            _currentTrackedDocument, accumulatedTime);
+
+        // Mark as prompted to prevent duplicate prompts
+        _promptedDocuments.Add(_currentTrackedDocument);
+
+        WpfApplication.Current.Dispatcher.Invoke(() => ShowTaskClassificationDialog(_currentTrackedDocument));
+    }
+
+    private TimeSpan GetAccumulatedTimeToday(string documentName)
+    {
+        try
+        {
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            var records = _coordinator.GetRecentSamples(500)
+                .Where(r => string.Equals(r.DocumentName, documentName, StringComparison.OrdinalIgnoreCase)
+                         && DateOnly.FromDateTime(r.StartedAtLocal) == today)
+                .ToList();
+
+            var totalSeconds = records.Sum(r => r.Duration.TotalSeconds);
+            return TimeSpan.FromSeconds(totalSeconds);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get accumulated time for {Document}", documentName);
+            return TimeSpan.Zero;
+        }
+    }
+
+    private void ShowTaskClassificationDialog(string documentName)
+    {
+        try
+        {
+            // Get recent customers for the dropdown
+            var recentCustomers = _coordinator.GetRecentSamples(100)
+                .Where(r => !string.IsNullOrWhiteSpace(r.GroupName))
+                .Select(r => r.GroupName!)
+                .Distinct()
+                .Take(10)
+                .ToList();
+
+            var dialog = new TaskClassificationDialog(documentName, recentCustomers);
+            var result = dialog.ShowDialog();
+
+            if (result != true || dialog.WasSkipped)
+            {
+                _logger.LogDebug("Task classification skipped for: {Document}", documentName);
+                return;
+            }
+
+            // Apply the classification to matching records
+            ApplyTaskClassification(documentName, dialog.IsBillable, dialog.Category, dialog.Customer);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to show task classification dialog");
+        }
+    }
+
+    private void ApplyTaskClassification(string documentName, bool isBillable, string? category, string? customer)
+    {
+        try
+        {
+            // Get today's records matching this document
+            var today = DateOnly.FromDateTime(DateTime.Now);
+            var records = _coordinator.GetRecentSamples(500)
+                .Where(r => string.Equals(r.DocumentName, documentName, StringComparison.OrdinalIgnoreCase)
+                         && DateOnly.FromDateTime(r.StartedAtLocal) == today)
+                .Select(r => r.Id)
+                .ToList();
+
+            if (records.Count == 0)
+            {
+                _logger.LogWarning("No records found to classify for document: {Document}", documentName);
+                return;
+            }
+
+            _coordinator.SetBillable(records, isBillable);
+            
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                _coordinator.SetBillableCategory(records, category);
+            }
+            
+            if (!string.IsNullOrWhiteSpace(customer))
+            {
+                _coordinator.SetGroupName(records, customer);
+            }
+
+            _logger.LogInformation("Classified {Count} records for '{Document}': Billable={Billable}, Category={Category}, Customer={Customer}",
+                records.Count, documentName, isBillable, category ?? "(none)", customer ?? "(none)");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to apply task classification for: {Document}", documentName);
+        }
     }
 
     private void ToggleRecording()
@@ -173,7 +343,11 @@ public sealed class TrayIconManager : IDisposable
 
     private void HandleContextChanged(object? sender, ActiveContextSnapshot? snapshot)
     {
-        WpfApplication.Current.Dispatcher.Invoke(() => UpdateTooltip(snapshot));
+        WpfApplication.Current.Dispatcher.Invoke(() => 
+        {
+            UpdateTooltip(snapshot);
+            TrackCurrentDocument(snapshot);
+        });
     }
 
     private void HandleSampleStored(object? sender, ActivitySample sample)
@@ -339,6 +513,8 @@ public sealed class TrayIconManager : IDisposable
 
         _clockTimer.Tick -= HandleClockTick;
         _clockTimer.Stop();
+        _taskPromptTimer.Tick -= HandleTaskPromptTick;
+        _taskPromptTimer.Stop();
         _coordinator.ContextChanged -= HandleContextChanged;
         _coordinator.SampleStored -= HandleSampleStored;
         _notifyIcon.MouseClick -= HandleNotifyIconClick;
