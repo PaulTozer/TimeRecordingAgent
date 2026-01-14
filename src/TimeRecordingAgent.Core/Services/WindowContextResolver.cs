@@ -1,6 +1,8 @@
 namespace TimeRecordingAgent.Core.Services;
 
-public static class WindowContextResolver
+using System.Text.RegularExpressions;
+
+public static partial class WindowContextResolver
 {
     public static string ResolveDocumentName(string processName, string windowTitle, Func<string?, string?> outlookSubjectProvider)
     {
@@ -10,6 +12,12 @@ public static class WindowContextResolver
         }
 
         var normalized = processName.ToLowerInvariant();
+        
+        // Browser handling - extract page title, removing browser suffix and notification counts
+        if (IsBrowserProcess(normalized))
+        {
+            return ExtractBrowserDocumentName(windowTitle);
+        }
         
         // Teams handling - extract meeting/channel name, ignoring email suffixes
         if (normalized is "ms-teams" or "teams" or "msteams")
@@ -59,6 +67,74 @@ public static class WindowContextResolver
 
         return windowTitle.Trim();
     }
+
+    private static bool IsBrowserProcess(string normalized)
+    {
+        return normalized is "chrome" or "msedge" or "firefox" or "brave" or "opera" or "vivaldi" 
+            || normalized.Contains("chrome") 
+            || normalized.Contains("edge");
+    }
+
+    /// <summary>
+    /// Extracts a stable document name from browser window titles.
+    /// Browser titles typically have format: "Page Title - Browser Name" or "(n) Page Title - Browser Name"
+    /// We want to extract just the page title, removing notification counts and browser suffix.
+    /// </summary>
+    private static string ExtractBrowserDocumentName(string windowTitle)
+    {
+        if (string.IsNullOrWhiteSpace(windowTitle))
+        {
+            return "Browser";
+        }
+
+        var title = windowTitle.Trim();
+
+        // Remove "and X more pages" patterns first (before removing browser suffix)
+        // Matches: " and 43 more pages - Work - Microsoft Edge" or " and 5 more pages - Google Chrome"
+        title = TabCountAndBrowserRegex().Replace(title, "");
+
+        // Remove common browser suffixes
+        string[] browserSuffixes = 
+        [
+            " - Google Chrome",
+            " - Microsoft Edge",
+            " - Mozilla Firefox",
+            " - Brave",
+            " - Opera",
+            " - Vivaldi",
+            " - Personal - Microsoft Edge",
+            " - Work - Microsoft Edge",
+            " and more - Google Chrome",
+            " and more - Microsoft Edge"
+        ];
+
+        foreach (var suffix in browserSuffixes)
+        {
+            if (title.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                title = title[..^suffix.Length];
+                break;
+            }
+        }
+
+        // Remove leading notification count like "(1) " or "(99+) "
+        title = NotificationCountRegex().Replace(title, "");
+
+        // Remove trailing "- Profile Name" patterns like "- Default" or "- Profile 1"
+        title = ProfileSuffixRegex().Replace(title, "");
+
+        return string.IsNullOrWhiteSpace(title) ? "Browser" : title.Trim();
+    }
+
+    [GeneratedRegex(@"^\(\d+\+?\)\s*")]
+    private static partial Regex NotificationCountRegex();
+
+    [GeneratedRegex(@"\s*-\s*(Default|Profile\s*\d+|Personal|Work)\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex ProfileSuffixRegex();
+
+    // Matches: " and 43 more pages - Work - Microsoft Edge" or " and 5 more pages - Google Chrome"
+    [GeneratedRegex(@"\s+and\s+\d+\s+more\s+pages?\s*(-\s*(Work|Personal)\s*)?-\s*(Microsoft\s*Edge|Google\s*Chrome|Mozilla\s*Firefox|Brave|Opera|Vivaldi)\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex TabCountAndBrowserRegex();
 
     private static bool IsModernOutlookProcess(string normalized)
     {

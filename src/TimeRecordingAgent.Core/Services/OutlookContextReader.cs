@@ -262,6 +262,191 @@ public sealed class OutlookContextReader : IOutlookContextReader
         return null;
     }
 
+    /// <summary>
+    /// Gets extended context from the active Outlook item including body snippet.
+    /// </summary>
+    public OutlookItemContext? TryGetActiveItemContext(string? windowTitle)
+    {
+        try
+        {
+            var application = GetOutlookApplication();
+            if (application is null)
+            {
+                return null;
+            }
+
+            // Try inspector first (open email/meeting window)
+            var context = TryGetInspectorItemContext(application);
+            if (context != null)
+            {
+                _logger.LogDebug("Got item context from inspector: {Type}, Subject: {Subject}", 
+                    (object)context.ItemType, (object?)context.Subject);
+                return context;
+            }
+
+            // Fall back to explorer selection
+            context = TryGetExplorerSelectionContext(application);
+            if (context != null)
+            {
+                _logger.LogDebug("Got item context from explorer: {Type}, Subject: {Subject}", 
+                    (object)context.ItemType, (object?)context.Subject);
+                return context;
+            }
+        }
+        catch (COMException ex)
+        {
+            _logger.LogDebug(ex, "COM error reading Outlook context");
+        }
+        catch (Exception ex) when (ex is InvalidCastException or InvalidOperationException)
+        {
+            _logger.LogDebug(ex, "Error accessing Outlook object model");
+        }
+
+        return null;
+    }
+
+    private OutlookItemContext? TryGetInspectorItemContext(dynamic application)
+    {
+        try
+        {
+            dynamic? inspector = application.ActiveInspector();
+            if (inspector is null) return null;
+
+            dynamic? item = inspector.CurrentItem;
+            if (item is null) return null;
+
+            return ExtractItemContext(item);
+        }
+        catch (COMException) { }
+        catch (RuntimeBinderException) { }
+
+        return null;
+    }
+
+    private OutlookItemContext? TryGetExplorerSelectionContext(dynamic application)
+    {
+        try
+        {
+            dynamic? explorer = application.ActiveExplorer();
+            if (explorer is null) return null;
+
+            dynamic? selection = explorer.Selection;
+            if (selection is null || (int)selection.Count == 0) return null;
+
+            dynamic? item = selection.Item(1);
+            if (item is null) return null;
+
+            return ExtractItemContext(item);
+        }
+        catch (COMException) { }
+        catch (RuntimeBinderException) { }
+
+        return null;
+    }
+
+    private OutlookItemContext? ExtractItemContext(dynamic item)
+    {
+        try
+        {
+            int itemClass = item.Class;
+            var itemType = itemClass switch
+            {
+                43 => OutlookItemType.Mail,           // olMail
+                26 => OutlookItemType.Appointment,     // olAppointment
+                53 or 54 or 55 or 56 or 57 => OutlookItemType.Meeting, // meeting-related
+                48 => OutlookItemType.Task,            // olTask
+                _ => OutlookItemType.Unknown
+            };
+
+            if (itemType == OutlookItemType.Unknown)
+            {
+                return null;
+            }
+
+            string? subject = null;
+            string? bodySnippet = null;
+
+            try { subject = (string?)item.Subject; } catch { }
+
+            // Try to get body - prefer plain text Body over HTMLBody for snippet
+            try
+            {
+                string? body = (string?)item.Body;
+                if (!string.IsNullOrWhiteSpace(body))
+                {
+                    bodySnippet = ExtractBodySnippet(body);
+                }
+            }
+            catch
+            {
+                // Body not available
+            }
+
+            // For meetings/appointments, also try to get Location
+            if (itemType is OutlookItemType.Meeting or OutlookItemType.Appointment)
+            {
+                try
+                {
+                    string? location = (string?)item.Location;
+                    if (!string.IsNullOrWhiteSpace(location) && !string.IsNullOrWhiteSpace(bodySnippet))
+                    {
+                        bodySnippet = $"Location: {location}. {bodySnippet}";
+                    }
+                    else if (!string.IsNullOrWhiteSpace(location))
+                    {
+                        bodySnippet = $"Location: {location}";
+                    }
+                }
+                catch { }
+            }
+
+            return new OutlookItemContext(subject, bodySnippet, itemType);
+        }
+        catch (COMException) { }
+        catch (RuntimeBinderException) { }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts a meaningful snippet from an email/meeting body.
+    /// Limits to first ~500 chars, removes excessive whitespace.
+    /// </summary>
+    private static string ExtractBodySnippet(string body)
+    {
+        const int maxLength = 500;
+
+        // Normalize line breaks and collapse multiple whitespace
+        var normalized = System.Text.RegularExpressions.Regex.Replace(body, @"[\r\n]+", " ");
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+", " ").Trim();
+
+        // Skip common email signature patterns if they appear early
+        var signatureMarkers = new[] { "Best regards", "Kind regards", "Sent from", "-----Original Message-----", "From:" };
+        foreach (var marker in signatureMarkers)
+        {
+            var idx = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (idx > 50 && idx < maxLength)
+            {
+                normalized = normalized[..idx].Trim();
+                break;
+            }
+        }
+
+        if (normalized.Length > maxLength)
+        {
+            normalized = normalized[..maxLength].Trim();
+            // Try to cut at last complete word
+            var lastSpace = normalized.LastIndexOf(' ');
+            if (lastSpace > maxLength - 50)
+            {
+                normalized = normalized[..lastSpace];
+            }
+            normalized += "...";
+        }
+
+        return normalized;
+    }
+
     [DllImport("oleaut32.dll")]
     private static extern int GetActiveObject(ref Guid rclsid, IntPtr reserved, out IntPtr ppunk);
 

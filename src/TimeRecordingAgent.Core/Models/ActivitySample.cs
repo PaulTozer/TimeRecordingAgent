@@ -5,7 +5,8 @@ public sealed record ActivitySample(
     DateTime EndedAtUtc,
     string ProcessName,
     string WindowTitle,
-    string DocumentName)
+    string DocumentName,
+    string? ContentSnippet = null)
 {
     public TimeSpan Duration => EndedAtUtc - StartedAtUtc;
 }

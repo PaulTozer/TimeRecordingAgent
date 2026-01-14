@@ -107,6 +107,11 @@ public sealed class RecordingCoordinator : IDisposable
         _store.SetBillableCategory(ids, category);
     }
 
+    public void SetDescription(IEnumerable<long> ids, string? description)
+    {
+        _store.SetDescription(ids, description);
+    }
+
     public void DeleteSamples(IEnumerable<long> ids)
     {
         _store.DeleteSamples(ids);

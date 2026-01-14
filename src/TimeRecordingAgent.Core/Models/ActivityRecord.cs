@@ -10,7 +10,8 @@ public sealed record ActivityRecord(
     bool IsApproved,
     string? GroupName,
     bool IsBillable = true,
-    string? BillableCategory = null)
+    string? BillableCategory = null,
+    string? Description = null)
 {
     public TimeSpan Duration => EndedAtUtc - StartedAtUtc;
     public DateTime StartedAtLocal => StartedAtUtc.ToLocalTime();

@@ -14,6 +14,7 @@ public partial class App : System.Windows.Application
     private ILoggerFactory? _loggerFactory;
     private ILogger<App>? _appLogger;
     private RecordingCoordinator? _coordinator;
+    private AiClassificationService? _aiService;
     private TrayIconManager? _tray;
 
     public App()
@@ -41,6 +42,7 @@ public partial class App : System.Windows.Application
 
         var screenState = new ScreenStateMonitor(_loggerFactory.CreateLogger<ScreenStateMonitor>());
         var outlookReader = new OutlookContextReader(_loggerFactory.CreateLogger<OutlookContextReader>());
+        var screenCapture = new ScreenCaptureService(_loggerFactory.CreateLogger<ScreenCaptureService>());
         var poller = new ForegroundWindowPoller(
             TimeSpan.FromSeconds(5),
             screenState,
@@ -51,7 +53,11 @@ public partial class App : System.Windows.Application
         var store = new SqliteTimeStore(dataPath, _loggerFactory.CreateLogger<SqliteTimeStore>());
         _coordinator = new RecordingCoordinator(poller, store, _loggerFactory.CreateLogger<RecordingCoordinator>());
 
-        _tray = new TrayIconManager(_coordinator, _loggerFactory.CreateLogger<TrayIconManager>(), dataPath);
+        // Initialize AI classification service (configuration is loaded by TrayIconManager from settings.json)
+        _aiService = new AiClassificationService(_loggerFactory.CreateLogger<AiClassificationService>());
+        _appLogger.LogInformation("AI classification service created. Configuration will be loaded from settings.json");
+
+        _tray = new TrayIconManager(_coordinator, _aiService, outlookReader, screenCapture, _loggerFactory.CreateLogger<TrayIconManager>(), dataPath);
         _tray.Initialize();
     }
 

@@ -27,6 +27,12 @@
                      ToolTip="Customer name"/>
             <Button Content="Assign Customer" Click="AssignGroup_Click" Margin="0,0,8,0" />
             <Button Content="Clear Customer" Click="ClearGroup_Click" Margin="0,0,8,0" />
+            <TextBox Width="200"
+                     Margin="16,0,8,0"
+                     VerticalContentAlignment="Center"
+                     Text="{Binding DescriptionInput, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Description of the work"/>
+            <Button Content="Set Description" Click="SetDescription_Click" Margin="0,0,8,0" />
         </StackPanel>
         
         <!-- Toolbar row 2: Filters and Column Visibility -->
@@ -38,6 +44,14 @@
                      Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"/>
             <CheckBox Content="Show pending only"
                       IsChecked="{Binding ShowOnlyUnapproved, Mode=TwoWay}"
+                      VerticalAlignment="Center"
+                      Margin="0,0,16,0" />
+            <CheckBox Content="Today only"
+                      IsChecked="{Binding ShowTodayOnly, Mode=TwoWay}"
+                      VerticalAlignment="Center"
+                      Margin="0,0,16,0" />
+            <CheckBox Content="Hide &lt; 5 min"
+                      IsChecked="{Binding HideUnderFiveMinutes, Mode=TwoWay}"
                       VerticalAlignment="Center"
                       Margin="0,0,16,0" />
             

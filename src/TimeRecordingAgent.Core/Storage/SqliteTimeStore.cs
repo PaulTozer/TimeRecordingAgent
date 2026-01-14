@@ -54,6 +54,7 @@ public sealed class SqliteTimeStore : IDisposable
         EnsureColumn(connection, "activity_log", "group_name", "TEXT NULL");
         EnsureColumn(connection, "activity_log", "is_billable", "INTEGER NOT NULL DEFAULT 1");
         EnsureColumn(connection, "activity_log", "billable_category", "TEXT NULL");
+        EnsureColumn(connection, "activity_log", "description", "TEXT NULL");
     }
 
     private static void EnsureColumn(SqliteConnection connection, string tableName, string columnName, string definition)
@@ -207,7 +208,7 @@ public sealed class SqliteTimeStore : IDisposable
         connection.Open();
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            SELECT id, started_at, ended_at, process_name, window_title, document_name, is_approved, group_name, is_billable, billable_category
+            SELECT id, started_at, ended_at, process_name, window_title, document_name, is_approved, group_name, is_billable, billable_category, description
             FROM activity_log
             ORDER BY is_approved ASC, started_at DESC
             LIMIT $take;
@@ -228,7 +229,8 @@ public sealed class SqliteTimeStore : IDisposable
             var group = reader.IsDBNull(7) ? null : reader.GetString(7);
             var billable = reader.IsDBNull(8) || reader.GetInt32(8) != 0;
             var billableCategory = reader.IsDBNull(9) ? null : reader.GetString(9);
-            results.Add(new ActivityRecord(id, started, ended, process, window, document, approved, group, billable, billableCategory));
+            var description = reader.IsDBNull(10) ? null : reader.GetString(10);
+            results.Add(new ActivityRecord(id, started, ended, process, window, document, approved, group, billable, billableCategory, description));
         }
 
         return results;
@@ -267,6 +269,15 @@ public sealed class SqliteTimeStore : IDisposable
         {
             command.CommandText = $"UPDATE activity_log SET billable_category = $category WHERE id IN ({placeholder});";
             command.Parameters.AddWithValue("$category", string.IsNullOrWhiteSpace(category) ? DBNull.Value : category);
+        });
+    }
+
+    public void SetDescription(IEnumerable<long> ids, string? description)
+    {
+        ExecuteIdUpdate(ids, (command, placeholder) =>
+        {
+            command.CommandText = $"UPDATE activity_log SET description = $desc WHERE id IN ({placeholder});";
+            command.Parameters.AddWithValue("$desc", string.IsNullOrWhiteSpace(description) ? DBNull.Value : description);
         });
     }
 

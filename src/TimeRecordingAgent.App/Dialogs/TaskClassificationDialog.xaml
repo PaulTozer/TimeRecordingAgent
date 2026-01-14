@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Classify Task" 
-        Height="320" Width="420"
+        Height="520" Width="460"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Topmost="True"
@@ -32,6 +32,8 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
         <TextBlock Grid.Row="0" FontWeight="Bold" FontSize="14" Margin="0,0,0,8">
@@ -41,9 +43,22 @@
         <TextBlock Grid.Row="1" x:Name="TaskNameText" TextWrapping="Wrap" Margin="0,0,0,16" 
                    Foreground="#0066CC" FontWeight="SemiBold"/>
         
-        <CheckBox Grid.Row="2" x:Name="IsBillableCheckbox" Content="This is billable work" IsChecked="True" Margin="0,0,0,12"/>
+        <!-- AI Suggestion Banner -->
+        <Border Grid.Row="2" x:Name="AiSuggestionBanner" Background="#E7F3FF" BorderBrush="#0078D4" 
+                BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,16" Visibility="Collapsed">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="🤖" FontSize="16" Margin="0,0,6,0"/>
+                    <TextBlock Text="AI Suggestions" FontWeight="SemiBold" Foreground="#0078D4"/>
+                </StackPanel>
+                <TextBlock x:Name="AiReasoningText" TextWrapping="Wrap" FontStyle="Italic" 
+                           Foreground="#555555" FontSize="11"/>
+            </StackPanel>
+        </Border>
         
-        <StackPanel Grid.Row="3" Margin="0,0,0,12">
+        <CheckBox Grid.Row="3" x:Name="IsBillableCheckbox" Content="This is billable work" IsChecked="True" Margin="0,0,0,12"/>
+        
+        <StackPanel Grid.Row="4" Margin="0,0,0,12">
             <TextBlock Margin="0,0,0,4">Category:</TextBlock>
             <ComboBox x:Name="CategoryCombo" IsEditable="True">
                 <ComboBoxItem>Development</ComboBoxItem>
@@ -55,12 +70,19 @@
             </ComboBox>
         </StackPanel>
         
-        <StackPanel Grid.Row="4" Margin="0,0,0,16">
+        <StackPanel Grid.Row="5" Margin="0,0,0,12">
             <TextBlock Margin="0,0,0,4">Customer:</TextBlock>
             <ComboBox x:Name="CustomerCombo" IsEditable="True"/>
         </StackPanel>
         
-        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+        <StackPanel Grid.Row="6" Margin="0,0,0,16">
+            <TextBlock Margin="0,0,0,4">Description:</TextBlock>
+            <TextBox x:Name="DescriptionTextBox" TextWrapping="Wrap" AcceptsReturn="True" 
+                     Height="60" VerticalScrollBarVisibility="Auto"
+                     ToolTip="Brief description of what you're working on"/>
+        </StackPanel>
+        
+        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
             <Button x:Name="SkipButton" Content="Skip" Width="80" Height="28" Margin="0,0,8,0" Click="SkipButton_Click"/>
             <Button x:Name="SaveButton" Content="Save" Width="80" Height="28" IsDefault="True" Click="SaveButton_Click"/>
         </StackPanel>

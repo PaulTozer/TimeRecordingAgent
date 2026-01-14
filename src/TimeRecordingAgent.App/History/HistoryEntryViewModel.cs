@@ -35,4 +35,6 @@ public sealed class HistoryEntryViewModel
     public string BillableDisplay => Record.IsBillable ? "Billable" : "Non-Billable";
     public string? BillableCategory => Record.BillableCategory;
     public string DisplayBillableCategory => string.IsNullOrWhiteSpace(Record.BillableCategory) ? "(No Category)" : Record.BillableCategory!;
+    public string? Description => Record.Description;
+    public string DisplayDescription => string.IsNullOrWhiteSpace(Record.Description) ? "(No Description)" : Record.Description!;
 }

@@ -9,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using Microsoft.Extensions.Logging;
+using TimeRecordingAgent.Core.Models;
 using TimeRecordingAgent.Core.Services;
 
 namespace TimeRecordingAgent.App.History;
@@ -19,8 +20,11 @@ public partial class HistoryWindow : Window, INotifyPropertyChanged
     private readonly ILogger? _logger;
     private bool _isRefreshing;
     private bool _showOnlyUnapproved;
+    private bool _showTodayOnly;
+    private bool _hideUnderFiveMinutes;
     private string _groupNameInput = string.Empty;
     private string _billableCategoryInput = string.Empty;
+    private string _descriptionInput = string.Empty;
     private string _lastRefreshedText = "Loading...";
     private string _filterText = string.Empty;
     private ICollectionView? _entriesView;
@@ -44,9 +48,10 @@ public partial class HistoryWindow : Window, INotifyPropertyChanged
         ColumnConfigs.Add(new ColumnConfig("Billable", "BillableDisplay", true, 90));
         ColumnConfigs.Add(new ColumnConfig("Category", "DisplayBillableCategory", true, 100));
         ColumnConfigs.Add(new ColumnConfig("Customer", "DisplayGroup", true, 120));
+        ColumnConfigs.Add(new ColumnConfig("Description", "DisplayDescription", true, 200));
         ColumnConfigs.Add(new ColumnConfig("Document", "DocumentName", true, 200));
         ColumnConfigs.Add(new ColumnConfig("Process", "ProcessName", false, 150)); // Hidden by default
-        ColumnConfigs.Add(new ColumnConfig("Window Title", "WindowTitle", true, 250));
+        ColumnConfigs.Add(new ColumnConfig("Window Title", "WindowTitle", false, 250)); // Hidden by default now that Description exists
         ColumnConfigs.Add(new ColumnConfig("Start", "StartedLocal", true, 140));
         ColumnConfigs.Add(new ColumnConfig("End", "EndedLocal", true, 140));
         ColumnConfigs.Add(new ColumnConfig("Duration", "FormattedDuration", true, 100));
@@ -143,6 +148,38 @@ public partial class HistoryWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public bool ShowTodayOnly
+    {
+        get => _showTodayOnly;
+        set
+        {
+            if (_showTodayOnly == value)
+            {
+                return;
+            }
+
+            _showTodayOnly = value;
+            OnPropertyChanged();
+            _ = RefreshAsync();
+        }
+    }
+
+    public bool HideUnderFiveMinutes
+    {
+        get => _hideUnderFiveMinutes;
+        set
+        {
+            if (_hideUnderFiveMinutes == value)
+            {
+                return;
+            }
+
+            _hideUnderFiveMinutes = value;
+            OnPropertyChanged();
+            _ = RefreshAsync();
+        }
+    }
+
     public string GroupNameInput
     {
         get => _groupNameInput;
@@ -169,6 +206,21 @@ public partial class HistoryWindow : Window, INotifyPropertyChanged
             }
 
             _billableCategoryInput = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string DescriptionInput
+    {
+        get => _descriptionInput;
+        set
+        {
+            if (_descriptionInput == value)
+            {
+                return;
+            }
+
+            _descriptionInput = value;
             OnPropertyChanged();
         }
     }
@@ -258,16 +310,44 @@ public partial class HistoryWindow : Window, INotifyPropertyChanged
         {
             await Task.Run(() => _coordinator.FlushCurrentSample()).ConfigureAwait(true);
             var records = await Task.Run(() => _coordinator.GetRecentSamples(500)).ConfigureAwait(true);
-            var filtered = (ShowOnlyUnapproved ? records.Where(r => !r.IsApproved) : records).ToList();
+            
+            // Apply filters
+            IEnumerable<ActivityRecord> filtered = records;
+            
+            if (ShowOnlyUnapproved)
+            {
+                filtered = filtered.Where(r => !r.IsApproved);
+            }
+            
+            if (ShowTodayOnly)
+            {
+                var today = DateTime.Today;
+                filtered = filtered.Where(r => r.StartedAtLocal.Date == today);
+            }
+            
+            if (HideUnderFiveMinutes)
+            {
+                filtered = filtered.Where(r => r.Duration.TotalMinutes >= 5);
+            }
+            
+            var filteredList = filtered.ToList();
 
             var liveRecord = _coordinator.GetCurrentActivity();
-            if (liveRecord is not null && (!ShowOnlyUnapproved || !liveRecord.IsApproved))
+            if (liveRecord is not null)
             {
-                filtered.Insert(0, liveRecord);
+                var includeLive = true;
+                if (ShowOnlyUnapproved && liveRecord.IsApproved) includeLive = false;
+                if (ShowTodayOnly && liveRecord.StartedAtLocal.Date != DateTime.Today) includeLive = false;
+                if (HideUnderFiveMinutes && liveRecord.Duration.TotalMinutes < 5) includeLive = false;
+                
+                if (includeLive)
+                {
+                    filteredList.Insert(0, liveRecord);
+                }
             }
 
-            var entryModels = filtered.Select(r => new HistoryEntryViewModel(r, r.Id < 0)).ToList();
-            var groupModels = filtered
+            var entryModels = filteredList.Select(r => new HistoryEntryViewModel(r, r.Id < 0)).ToList();
+            var groupModels = filteredList
                 .GroupBy(r => string.IsNullOrWhiteSpace(r.GroupName) ? "(No Customer)" : r.GroupName!)
                 .Select(g => new GroupSummaryViewModel(g.Key, TimeSpan.FromSeconds(g.Sum(r => r.Duration.TotalSeconds))))
                 .OrderByDescending(g => g.TotalMinutes)
@@ -289,7 +369,7 @@ public partial class HistoryWindow : Window, INotifyPropertyChanged
             }
 
             // Calculate email time summaries (Outlook entries only)
-            var emailModels = filtered
+            var emailModels = filteredList
                 .Where(r => r.ProcessName.Equals("OUTLOOK", StringComparison.OrdinalIgnoreCase)
                          && !string.IsNullOrWhiteSpace(r.DocumentName)
                          && !r.DocumentName.Contains(" - ") // Exclude "Inbox - user@email.com" style entries
@@ -435,6 +515,19 @@ public partial class HistoryWindow : Window, INotifyPropertyChanged
 
         var category = string.IsNullOrWhiteSpace(BillableCategoryInput) ? null : BillableCategoryInput.Trim();
         await Task.Run(() => _coordinator.SetBillableCategory(ids, category));
+        await RefreshAsync();
+    }
+
+    private async void SetDescription_Click(object sender, RoutedEventArgs e)
+    {
+        var ids = GetSelectedIds();
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        var description = string.IsNullOrWhiteSpace(DescriptionInput) ? null : DescriptionInput.Trim();
+        await Task.Run(() => _coordinator.SetDescription(ids, description));
         await RefreshAsync();
     }
 
