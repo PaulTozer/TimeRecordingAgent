@@ -50,6 +50,7 @@ public sealed class ForegroundWindowPoller : IDisposable
             "OLK",
             "HXOUTLOOK",
             "HXMAIL",
+            "msedgewebview2", // Embedded web content in Office apps
         };
 
         if (excludedProcessNames is not null)
@@ -238,6 +239,29 @@ public sealed class ForegroundWindowPoller : IDisposable
     private static string DeriveProcessAlias(IntPtr handle, Process process, ref string? title)
     {
         var name = process.ProcessName;
+        
+        // Handle WebView2-hosted content (used by Outlook, PowerPoint embeds, etc.)
+        if (string.Equals(name, "msedgewebview2", StringComparison.OrdinalIgnoreCase))
+        {
+            // Try to identify the host application from window title or parent
+            if (ContainsOutlookHint(title))
+            {
+                return "OUTLOOK";
+            }
+            
+            // For embedded Power BI or other WebView2 content, try to get meaningful context
+            // Check if title suggests PowerPoint embedded content
+            if (!string.IsNullOrWhiteSpace(title) && 
+                (title.Contains("Power BI", StringComparison.OrdinalIgnoreCase) ||
+                 title.Contains("PowerBI", StringComparison.OrdinalIgnoreCase)))
+            {
+                return "POWERPNT"; // Attribute to PowerPoint
+            }
+            
+            // Keep as msedgewebview2 but it will be captured (not discarded)
+            return "msedgewebview2";
+        }
+        
         if (IsModernOutlookHost(name))
         {
             if (ContainsOutlookHint(title) || TryCaptureOutlookChildTitle(handle, ref title))
@@ -376,10 +400,12 @@ public sealed class ForegroundWindowPoller : IDisposable
 
         internal ActivitySample ToSample(DateTime now)
         {
-            var end = _lastSeenUtc > Snapshot.StartedAtUtc ? _lastSeenUtc : now;
+            // Always use 'now' as the end time - this is when we detected the context change
+            // or when a flush was requested. Using _lastSeenUtc would lose time between
+            // the last poll that saw this context and when the switch was detected.
             return new ActivitySample(
                 Snapshot.StartedAtUtc,
-                end,
+                now,
                 Snapshot.ProcessName,
                 Snapshot.WindowTitle,
                 Snapshot.DocumentName);
