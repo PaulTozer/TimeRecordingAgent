@@ -1,15 +1,18 @@
 # Time Recording Agent (.NET)
 
-A lightweight Windows tray application that records which document or email you are working on by inspecting the active window title. Built with C#/.NET 8, it stores events locally in SQLite and avoids recording when the computer is idle, locked, or asleep.
+A lightweight Windows tray application that records which document or email you are working on by inspecting the active window title. Built with C#/.NET 10, it stores events locally in SQLite and avoids recording when the computer is idle, locked, or asleep.
 
 ## Features
 - System tray (NotifyIcon) host with start/pause/export actions.
 - Foreground window polling every 5 seconds using Win32 APIs.
-- Document detection for Word/Excel/PowerPoint and Outlook mail subjects; generic fallback for other apps.
+- Document detection for Word/Excel/PowerPoint, Outlook mail subjects, and browser tabs; generic fallback for other apps.
+- Browser title normalization to aggregate time correctly across tab switches.
 - Screensaver/standby detection so idle time is ignored automatically.
 - SQLite-backed log with helper query for "today" aggregated durations.
 - Left-click history window to review entries, approve/delete them, and group related work items.
 - **AI-Powered Task Classification** — Automatically detects customer names and suggests billing categories using GitHub-hosted AI models.
+- **Vision-based Context** — Uses screen capture for apps where content can't be extracted directly (Teams, browsers, etc.).
+- **Description Field** — AI can suggest descriptions based on email/document body content.
 
 ## AI-Powered Suggestions
 
@@ -46,7 +49,7 @@ When you've been working on a task for 5+ minutes, a classification dialog appea
 - **Task Prompts Enabled**: Toggle the 5-minute classification prompts
 
 ## Prerequisites
-- Windows 10/11 with .NET 8 SDK installed.
+- Windows 10/11 with .NET 10 SDK installed.
 - Outlook desktop (optional) if you want active mail subject logging.
 - Microsoft Foundry deployment (optional) for AI-powered suggestions.
 

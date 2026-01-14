@@ -4,7 +4,7 @@
 Consultants frequently forget to record the exact document or email they were focused on while jumping between Word, Outlook, and other desktop apps. Manual timers are imprecise, and back-filling time after a long day leads to inaccurate billing. We need a lightweight Windows tray application that continuously records which document or email is active, but only when the device is truly in use.
 
 ## Success Criteria
-- Windows tray app written in C#/.NET 8 that starts with the OS and provides pause/resume/exit controls.
+- Windows tray app written in C#/.NET 10 that starts with the OS and provides pause/resume/exit controls.
 - Captures the foreground window title, executable name, and precise timestamps at a configurable cadence (default 5 seconds).
 - Extracts the meaningful document identifier from titles (e.g., `ProjectPlan.docx` for Word or the current message subject for Outlook).
 - Skips logging whenever the screensaver is running, the workstation is locked, or the device is in standby/suspend mode.
@@ -34,7 +34,7 @@ Consultants frequently forget to record the exact document or email they were fo
    - Optional CSV export command for the current day.
 
 ## Non-Functional Requirements
-- .NET 8.0 (Windows) with nullable reference types enabled.
+- .NET 10.0 (Windows) with nullable reference types enabled.
 - No third-party components beyond NuGet packages (`Microsoft.Data.Sqlite`, `Microsoft.Office.Interop.Outlook`).
 - CPU usage under 3% on average; memory footprint under 150 MB.
 - Unit tests for title parsing, Outlook context extraction (mocked), and session coalescing logic.
