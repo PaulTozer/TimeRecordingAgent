@@ -133,6 +133,19 @@ public partial class AiSettingsDialog : Window
         try
         {
             var cleanedEndpoint = CleanEndpointUrl(settings.Endpoint!);
+            
+            // For Azure OpenAI (cognitiveservices.azure.com), construct the full deployment URL
+            if (cleanedEndpoint.Contains("cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase) ||
+                cleanedEndpoint.Contains("openai.azure.com", StringComparison.OrdinalIgnoreCase))
+            {
+                // Azure OpenAI requires the deployment path
+                if (!cleanedEndpoint.Contains("/openai/deployments/", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Append the deployment path using the model name as deployment name
+                    cleanedEndpoint = $"{cleanedEndpoint}/openai/deployments/{settings.Model}";
+                }
+            }
+            
             var endpoint = new Uri(cleanedEndpoint);
             var credential = new AzureKeyCredential(settings.ApiKey!);
             var client = new ChatCompletionsClient(endpoint, credential, new AzureAIInferenceClientOptions());
@@ -144,8 +157,6 @@ public partial class AiSettingsDialog : Window
                     new ChatRequestSystemMessage("You are a helpful assistant."),
                     new ChatRequestUserMessage("Say 'Hello' in one word.")
                 },
-                Temperature = 0.1f,
-                MaxTokens = 10,
                 Model = settings.Model
             };
 
@@ -161,13 +172,13 @@ public partial class AiSettingsDialog : Window
         catch (RequestFailedException ex)
         {
             var hint = ex.Status == 404 
-                ? "\n\nHint: For Azure OpenAI, use endpoint format:\nhttps://<resource>.cognitiveservices.azure.com/openai/deployments/<deployment-name>\n(without /chat/completions or ?api-version=...)"
+                ? "\n\nHint: For Azure OpenAI, enter just the base URL:\n• https://<resource>.cognitiveservices.azure.com\n• https://<resource>.openai.azure.com\n\nThe deployment path will be added automatically using the Model name.\n\nDo NOT include /openai/responses, /chat/completions or ?api-version=..."
                 : "";
             return (false, $"API Error ({ex.Status}): {ex.Message}{hint}");
         }
         catch (UriFormatException)
         {
-            return (false, "Invalid endpoint URL format.\n\nExpected format:\nhttps://<resource>.cognitiveservices.azure.com/openai/deployments/<deployment-name>");
+            return (false, "Invalid endpoint URL format.\n\nExpected format:\nhttps://<resource>.cognitiveservices.azure.com\n\nThe deployment path will be added automatically using the Model name.");
         }
         catch (Exception ex)
         {
@@ -193,6 +204,18 @@ public partial class AiSettingsDialog : Window
         if (cleaned.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
         {
             cleaned = cleaned[..^"/chat/completions".Length];
+        }
+        
+        // Remove /openai/responses path (new Responses API - not compatible with this SDK)
+        if (cleaned.EndsWith("/openai/responses", StringComparison.OrdinalIgnoreCase))
+        {
+            cleaned = cleaned[..^"/openai/responses".Length];
+        }
+        
+        // Remove bare /openai path
+        if (cleaned.EndsWith("/openai", StringComparison.OrdinalIgnoreCase))
+        {
+            cleaned = cleaned[..^"/openai".Length];
         }
         
         // Remove trailing slash

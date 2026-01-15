@@ -131,15 +131,15 @@ Guidelines:
 
             try
             {
-                var cleanedEndpoint = CleanEndpointUrl(settings.Endpoint!);
-                var uri = new Uri(cleanedEndpoint);
+                _model = settings.Model ?? "gpt-4o-mini";
+                var constructedEndpoint = ConstructEndpointUrl(settings.Endpoint!, _model);
+                var uri = new Uri(constructedEndpoint);
                 var credential = new AzureKeyCredential(settings.ApiKey!);
                 _client = new ChatCompletionsClient(uri, credential, new AzureAIInferenceClientOptions());
-                _model = settings.Model ?? "gpt-4o-mini";
                 _isConfigured = true;
                 _logger.LogInformation(
-                    "AI Classification service configured with Microsoft Foundry endpoint: {Endpoint}, model: {Model}, enabled: {Enabled}", 
-                    settings.Endpoint, 
+                    "AI Classification service configured with endpoint: {Endpoint}, model: {Model}, enabled: {Enabled}", 
+                    constructedEndpoint, 
                     _model,
                     _isEnabled);
             }
@@ -172,8 +172,38 @@ Guidelines:
             cleaned = cleaned[..^"/chat/completions".Length];
         }
         
+        // Remove /openai/responses path (Responses API - not what we use)
+        if (cleaned.EndsWith("/openai/responses", StringComparison.OrdinalIgnoreCase))
+        {
+            cleaned = cleaned[..^"/openai/responses".Length];
+        }
+        
+        // Remove /openai suffix if present
+        if (cleaned.EndsWith("/openai", StringComparison.OrdinalIgnoreCase))
+        {
+            cleaned = cleaned[..^"/openai".Length];
+        }
+        
         // Remove trailing slash
         cleaned = cleaned.TrimEnd('/');
+        
+        return cleaned;
+    }
+
+    /// <summary>
+    /// Constructs the full endpoint URL, adding deployment path for Azure OpenAI if needed.
+    /// </summary>
+    private static string ConstructEndpointUrl(string baseEndpoint, string model)
+    {
+        var cleaned = CleanEndpointUrl(baseEndpoint);
+        
+        // For Azure OpenAI (cognitiveservices.azure.com or openai.azure.com), add deployment path
+        if ((cleaned.Contains("cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase) ||
+             cleaned.Contains("openai.azure.com", StringComparison.OrdinalIgnoreCase)) &&
+            !cleaned.Contains("/openai/deployments/", StringComparison.OrdinalIgnoreCase))
+        {
+            cleaned = $"{cleaned}/openai/deployments/{model}";
+        }
         
         return cleaned;
     }
@@ -223,7 +253,6 @@ Guidelines:
                     new ChatRequestSystemMessage(SystemPrompt),
                     new ChatRequestUserMessage(userPrompt)
                 },
-                Temperature = 0.3f, // Lower temperature for more consistent classification
                 Model = _model
             };
 
@@ -312,9 +341,7 @@ Guidelines:
                     new ChatRequestSystemMessage(VisionSystemPrompt),
                     new ChatRequestUserMessage(userMessageContent)
                 },
-                Temperature = 0.3f,
-                Model = _model,
-                MaxTokens = 500 // Limit response size
+                Model = _model
             };
 
             _logger.LogDebug("Requesting AI vision classification for document: {Document}", documentName);
