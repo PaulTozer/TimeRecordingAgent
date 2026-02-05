@@ -15,9 +15,14 @@ public sealed class AppSettings
     };
 
     /// <summary>
-    /// Azure AI / Microsoft Foundry settings.
+    /// Azure AI / Microsoft Foundry settings for classification.
     /// </summary>
     public AzureAiSettings AzureAi { get; set; } = new();
+
+    /// <summary>
+    /// Microsoft Foundry Agent settings for timesheet verification.
+    /// </summary>
+    public FoundryAgentSettings FoundryAgent { get; set; } = new();
 
     /// <summary>
     /// General application settings.
@@ -107,4 +112,38 @@ public sealed class GeneralSettings
     /// The threshold in minutes before prompting for task classification.
     /// </summary>
     public int PromptThresholdMinutes { get; set; } = 5;
+}
+
+/// <summary>
+/// Settings for Microsoft Foundry Agent used for timesheet verification.
+/// </summary>
+public sealed class FoundryAgentSettings
+{
+    /// <summary>
+    /// The Microsoft Foundry project endpoint URL.
+    /// Example: https://your-project.services.ai.azure.com
+    /// </summary>
+    public string? ProjectEndpoint { get; set; }
+
+    /// <summary>
+    /// The model deployment name (e.g., "gpt-4o", "gpt-4o-mini").
+    /// </summary>
+    public string DeploymentName { get; set; } = "gpt-4o-mini";
+
+    /// <summary>
+    /// Whether timesheet verification is enabled.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Custom outside counsel guidelines to verify against.
+    /// If null, default guidelines will be used.
+    /// </summary>
+    public string? OutsideCounselGuidelines { get; set; }
+
+    /// <summary>
+    /// Returns true if the settings are configured with a project endpoint.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ProjectEndpoint);
 }

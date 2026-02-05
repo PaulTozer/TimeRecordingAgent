@@ -74,3 +74,123 @@ When you've been working on a task for 5+ minutes, a classification dialog appea
 - Optional UI for viewing/editing historical entries.
 - Installer packaging (MSIX or Squirrel).
 - Additional application-specific parsers (Teams, browsers, IDEs).
+
+## Timesheet Verification with Microsoft Foundry Agent
+
+The application can automatically verify your daily timesheet entries against outside counsel guidelines using Microsoft Foundry (Azure AI Foundry). This helps ensure compliance before submitting timesheets.
+
+### What It Checks
+
+The verification agent analyzes each time entry for:
+- **Vague descriptions** — Flags entries like "work on matter" or "review documents"
+- **Block billing** — Detects multiple tasks combined in one entry
+- **Excessive time** — Questions unusually large time increments
+- **Category mismatches** — Verifies category matches the description
+- **Billability issues** — Identifies administrative tasks marked as billable
+- **Missing information** — Ensures required fields are populated
+
+### Setting Up Microsoft Foundry Agent
+
+#### Prerequisites
+
+1. **Azure Subscription** — You need an Azure account
+2. **Azure CLI** — Install from https://docs.microsoft.com/en-us/cli/azure/install-azure-cli
+3. **Login to Azure** — Run `az login` in your terminal before using the app
+
+#### Step 1: Create an Azure OpenAI Resource
+
+1. Go to the [Azure Portal](https://portal.azure.com)
+2. Search for **"Azure OpenAI"** and click **Create**
+3. Fill in:
+   - **Subscription**: Your Azure subscription
+   - **Resource group**: Create new or use existing
+   - **Region**: Choose a region that supports GPT-4o (e.g., East US, West Europe)
+   - **Name**: A unique name (e.g., `mycompany-openai`)
+   - **Pricing tier**: Standard S0
+4. Click **Review + Create**, then **Create**
+5. Wait for deployment to complete
+
+#### Step 2: Deploy a Model
+
+1. Once the resource is created, go to **Azure AI Studio** (https://ai.azure.com)
+2. Select your resource/project
+3. Go to **Deployments** → **Create deployment**
+4. Choose a model:
+   - **gpt-4o-mini** — Recommended for cost-efficiency
+   - **gpt-4o** — Better accuracy, higher cost
+5. Give it a deployment name (e.g., `gpt-4o-mini`)
+6. Click **Create**
+
+#### Step 3: Get Your Endpoint URL
+
+1. In Azure AI Studio, go to your project
+2. Click on **Overview** or **Endpoints**
+3. Copy the **Endpoint URL** — it looks like:
+   ```
+   https://your-resource-name.openai.azure.com/
+   ```
+
+#### Step 4: Configure the Application
+
+Edit your `data/settings.json` file and add the `foundryAgent` section:
+
+```json
+{
+  "azureAi": {
+    "endpoint": "https://your-resource.openai.azure.com/",
+    "apiKey": "your-api-key-here",
+    "model": "gpt-4o-mini",
+    "enabled": true
+  },
+  "foundryAgent": {
+    "projectEndpoint": "https://your-resource.openai.azure.com/",
+    "deploymentName": "gpt-4o-mini",
+    "enabled": true,
+    "outsideCounselGuidelines": null
+  },
+  "general": {
+    "taskPromptsEnabled": true,
+    "promptThresholdMinutes": 5
+  }
+}
+```
+
+**Important**: The Foundry Agent uses **Azure CLI authentication** (not API keys). Make sure you've run `az login` before starting the application.
+
+#### Step 5: Verify Setup
+
+1. Run `az login` in your terminal
+2. Start the Time Recording Agent
+3. The verification feature will now be available
+
+### Custom Outside Counsel Guidelines
+
+You can provide your own guidelines by setting `outsideCounselGuidelines` in the settings:
+
+```json
+{
+  "foundryAgent": {
+    "projectEndpoint": "https://your-resource.openai.azure.com/",
+    "deploymentName": "gpt-4o-mini",
+    "enabled": true,
+    "outsideCounselGuidelines": "Your firm's specific billing guidelines here..."
+  }
+}
+```
+
+If left as `null`, the application uses built-in default guidelines covering:
+- Description requirements (specific, detailed entries)
+- Block billing prohibition
+- Time increment guidelines (0.1 hour minimum, 8 hour maximum)
+- Billable vs non-billable classification
+- Category accuracy requirements
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Not configured" | Check that `projectEndpoint` is set in settings.json |
+| Authentication failed | Run `az login` and ensure you have access to the Azure OpenAI resource |
+| Model not found | Verify `deploymentName` matches your deployed model name exactly |
+| Slow responses | Consider using `gpt-4o-mini` instead of `gpt-4o` for faster responses |
+
