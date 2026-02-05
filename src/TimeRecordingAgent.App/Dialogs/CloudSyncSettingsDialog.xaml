@@ -1,0 +1,150 @@
+<Window x:Class="TimeRecordingAgent.App.Dialogs.CloudSyncSettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cloud Sync Settings" 
+        Height="520" Width="520"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        ShowInTaskbar="True"
+        Topmost="True">
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="Padding" Value="6"/>
+        </Style>
+        <Style TargetType="PasswordBox">
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="Padding" Value="6"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Margin" Value="0,0,0,12"/>
+            <Setter Property="Padding" Value="6"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+            <TextBlock Text="☁️" FontSize="24" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <StackPanel>
+                <TextBlock Text="Cloud Sync Settings" FontWeight="Bold" FontSize="16"/>
+                <TextBlock Text="Sync timesheet entries to Azure PostgreSQL" Foreground="#666666" FontSize="12"/>
+            </StackPanel>
+        </StackPanel>
+        
+        <!-- Enable Cloud Sync -->
+        <CheckBox Grid.Row="1" x:Name="EnabledCheckbox" Content="Enable Cloud Sync" 
+                  FontWeight="SemiBold" Margin="0,0,0,16"/>
+        
+        <!-- Provider -->
+        <StackPanel Grid.Row="2">
+            <TextBlock>Database Provider:</TextBlock>
+            <ComboBox x:Name="ProviderCombo">
+                <ComboBoxItem Content="Azure Database for PostgreSQL" Tag="PostgreSQL" IsSelected="True"/>
+                <ComboBoxItem Content="Azure SQL Database" Tag="AzureSQL"/>
+            </ComboBox>
+        </StackPanel>
+        
+        <!-- Connection String Builder -->
+        <StackPanel Grid.Row="3">
+            <TextBlock>Server Host:</TextBlock>
+            <TextBox x:Name="HostTextBox" 
+                     ToolTip="e.g., yourserver.postgres.database.azure.com"/>
+        </StackPanel>
+        
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock>Database Name:</TextBlock>
+                <TextBox x:Name="DatabaseTextBox" Text="timesheets"
+                         ToolTip="The database name"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <TextBlock>Username:</TextBlock>
+                <TextBox x:Name="UsernameTextBox" 
+                         ToolTip="Database username"/>
+            </StackPanel>
+        </Grid>
+        
+        <!-- Password -->
+        <StackPanel Grid.Row="5">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock>Password:</TextBlock>
+                <TextBlock Text=" (stored locally)" Foreground="#888888" FontSize="11"/>
+            </StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <PasswordBox Grid.Column="0" x:Name="PasswordBox" 
+                             ToolTip="Database password"/>
+                <Button Grid.Column="1" x:Name="ShowPasswordButton" Content="👁" Width="32" Height="32" 
+                        Margin="4,0,0,12" Click="ShowPasswordButton_Click" ToolTip="Show/hide password"/>
+            </Grid>
+        </StackPanel>
+        
+        <!-- User ID and Sync Interval -->
+        <Grid Grid.Row="6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock>Your User ID (email):</TextBlock>
+                <TextBox x:Name="UserIdTextBox" 
+                         ToolTip="Your unique identifier for synced entries"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <TextBlock>Sync Interval:</TextBlock>
+                <ComboBox x:Name="IntervalCombo" Width="100">
+                    <ComboBoxItem Content="5 min" Tag="5"/>
+                    <ComboBoxItem Content="15 min" Tag="15" IsSelected="True"/>
+                    <ComboBoxItem Content="30 min" Tag="30"/>
+                    <ComboBoxItem Content="60 min" Tag="60"/>
+                </ComboBox>
+            </StackPanel>
+        </Grid>
+        
+        <!-- Sync Approved Only -->
+        <CheckBox Grid.Row="7" x:Name="SyncApprovedOnlyCheckbox" 
+                  Content="Only sync approved entries" Margin="0,0,0,16"/>
+        
+        <!-- Status -->
+        <Border Grid.Row="8" x:Name="StatusBorder" CornerRadius="4" Padding="12" Margin="0,0,0,16"
+                Background="#FFF3CD" BorderBrush="#FFC107" BorderThickness="1"
+                VerticalAlignment="Top">
+            <TextBlock x:Name="StatusText" TextWrapping="Wrap" 
+                       Foreground="#856404" FontSize="12"/>
+        </Border>
+        
+        <!-- Buttons -->
+        <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="TestButton" Content="Test Connection" Width="120" Height="32" 
+                    Margin="0,0,8,0" Click="TestButton_Click"/>
+            <Button x:Name="SaveButton" Content="Save" Width="80" Height="32" 
+                    Margin="0,0,8,0" Click="SaveButton_Click" IsDefault="True"/>
+            <Button Content="Cancel" Width="80" Height="32" Click="CancelButton_Click" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

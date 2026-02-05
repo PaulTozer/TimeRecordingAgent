@@ -37,6 +37,7 @@ public sealed class TrayIconManager : IDisposable
     private readonly ToolStripMenuItem _promptToggleItem;
     private readonly ToolStripMenuItem _aiToggleItem;
     private readonly ToolStripMenuItem _aiSettingsItem;
+    private readonly ToolStripMenuItem _cloudSyncSettingsItem;
     private readonly DispatcherTimer _clockTimer;
     private readonly DispatcherTimer _taskPromptTimer;
     private readonly HashSet<string> _promptedDocuments = new(StringComparer.OrdinalIgnoreCase);
@@ -91,6 +92,7 @@ public sealed class TrayIconManager : IDisposable
             Enabled = _aiService.IsConfigured
         };
         _aiSettingsItem = new ToolStripMenuItem("Configure AI...", null, (_, _) => ShowAiSettingsDialog());
+        _cloudSyncSettingsItem = new ToolStripMenuItem("Configure Cloud Sync...", null, (_, _) => ShowCloudSyncSettingsDialog());
         
         _clockTimer = new DispatcherTimer
         {
@@ -118,6 +120,7 @@ public sealed class TrayIconManager : IDisposable
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_aiToggleItem);
         menu.Items.Add(_aiSettingsItem);
+        menu.Items.Add(_cloudSyncSettingsItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Export Today", null, async (_, _) => await ExportTodayAsync()));
         menu.Items.Add(new ToolStripMenuItem("Open Log Folder", null, (_, _) => OpenLogFolder()));
@@ -168,6 +171,35 @@ public sealed class TrayIconManager : IDisposable
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to show AI settings dialog");
+            }
+        });
+    }
+
+    private void ShowCloudSyncSettingsDialog()
+    {
+        WpfApplication.Current.Dispatcher.Invoke(() =>
+        {
+            try
+            {
+                var dialog = new CloudSyncSettingsDialog(_settings.CloudSync);
+                var result = dialog.ShowDialog();
+
+                if (result == true && dialog.WasSaved)
+                {
+                    // Update settings
+                    _settings.CloudSync = dialog.UpdatedSettings;
+                    _settings.Save(_settingsPath);
+                    _logger.LogInformation("Cloud Sync settings saved to {Path}", _settingsPath);
+
+                    if (_settings.CloudSync.Enabled && _settings.CloudSync.IsConfigured)
+                    {
+                        _logger.LogInformation("Cloud Sync is now configured for user {UserId}.", _settings.CloudSync.UserId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to show Cloud Sync settings dialog");
             }
         });
     }

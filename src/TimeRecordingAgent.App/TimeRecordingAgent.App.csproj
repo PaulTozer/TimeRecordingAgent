@@ -15,5 +15,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.*" />
+    <PackageReference Include="Npgsql" Version="9.*" />
   </ItemGroup>
 </Project>

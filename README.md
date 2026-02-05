@@ -288,31 +288,29 @@ az postgres flexible-server firewall-rule create \
 
 #### Step 2: Configure the Desktop App
 
-In `data/settings.json`:
+Right-click the tray icon and select **"Configure Cloud Sync..."** to open the settings dialog:
 
-```json
-{
-  "CloudSync": {
-    "Enabled": true,
-    "Provider": "PostgreSQL",
-    "ConnectionString": "Host=timerecording-db.postgres.database.azure.com;Database=timesheets;Username=adminuser;Password=YourSecurePassword123!;SSL Mode=Require",
-    "UserId": "user@company.com",
-    "SyncIntervalMinutes": 15,
-    "SyncApprovedOnly": false
-  }
-}
-```
+1. **Enable Cloud Sync** — Check to enable automatic syncing
+2. **Database Provider** — Select "Azure Database for PostgreSQL"
+3. **Server Host** — Enter your PostgreSQL server (e.g., `timerecording-db.postgres.database.azure.com`)
+4. **Database Name** — Enter `timesheets`
+5. **Username** — Your PostgreSQL admin username
+6. **Password** — Your PostgreSQL password (stored locally, never in source code)
+7. **Your User ID** — Your email address (used to identify your entries)
+8. **Sync Interval** — How often to sync (15 minutes recommended)
+9. Click **"Test Connection"** to verify the settings work
+10. Click **"Save"** to store the configuration
+
+Settings are saved to `data/settings.json` in the application directory. The app will automatically create the required database schema on first sync.
 
 | Setting | Description |
 |---------|-------------|
 | `Enabled` | Turn cloud sync on/off |
 | `Provider` | `PostgreSQL` or `AzureSQL` |
-| `ConnectionString` | Full connection string to your database |
+| `Server Host` | Your Azure PostgreSQL server hostname |
 | `UserId` | Unique identifier for this user (typically email) |
 | `SyncIntervalMinutes` | How often to sync (default: 15 minutes) |
 | `SyncApprovedOnly` | Only sync entries marked as approved |
-
-The app will automatically create the required database schema on first sync.
 
 #### Step 3: Deploy the Azure Function
 
