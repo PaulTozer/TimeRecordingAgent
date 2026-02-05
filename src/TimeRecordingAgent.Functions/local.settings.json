@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "PostgreSQL__ConnectionString": "Host=YOUR_POSTGRES_HOST.postgres.database.azure.com;Database=timesheets;Username=YOUR_USERNAME;Password=YOUR_PASSWORD;SSL Mode=Require",
+    "API_KEY": "your-api-key-for-foundry-agent"
+  }
+}

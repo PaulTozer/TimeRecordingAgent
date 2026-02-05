@@ -13,5 +13,6 @@
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="*-*" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.*" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
+    <PackageReference Include="Npgsql" Version="9.*" />
   </ItemGroup>
 </Project>

@@ -25,6 +25,11 @@ public sealed class AppSettings
     public FoundryAgentSettings FoundryAgent { get; set; } = new();
 
     /// <summary>
+    /// Cloud database sync settings for pushing entries to Azure.
+    /// </summary>
+    public CloudSyncSettings CloudSync { get; set; } = new();
+
+    /// <summary>
     /// General application settings.
     /// </summary>
     public GeneralSettings General { get; set; } = new();
@@ -146,4 +151,64 @@ public sealed class FoundryAgentSettings
     /// </summary>
     [JsonIgnore]
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ProjectEndpoint);
+}
+
+/// <summary>
+/// Settings for syncing timesheet data to Azure cloud database.
+/// </summary>
+public sealed class CloudSyncSettings
+{
+    /// <summary>
+    /// Whether cloud sync is enabled.
+    /// </summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    /// The database provider type.
+    /// </summary>
+    public CloudDatabaseProvider Provider { get; set; } = CloudDatabaseProvider.PostgreSQL;
+
+    /// <summary>
+    /// The connection string for the Azure database.
+    /// For PostgreSQL: "Host=myserver.postgres.database.azure.com;Database=timesheets;Username=user;Password=pass;SSL Mode=Require"
+    /// </summary>
+    public string? ConnectionString { get; set; }
+
+    /// <summary>
+    /// The user identifier to associate with synced entries (e.g., email or employee ID).
+    /// </summary>
+    public string? UserId { get; set; }
+
+    /// <summary>
+    /// How often to sync entries to the cloud (in minutes).
+    /// </summary>
+    public int SyncIntervalMinutes { get; set; } = 15;
+
+    /// <summary>
+    /// Whether to only sync approved entries.
+    /// </summary>
+    public bool SyncApprovedOnly { get; set; } = false;
+
+    /// <summary>
+    /// Returns true if the settings are configured for cloud sync.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ConnectionString) && !string.IsNullOrWhiteSpace(UserId);
+}
+
+/// <summary>
+/// Supported cloud database providers.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum CloudDatabaseProvider
+{
+    /// <summary>
+    /// Azure Database for PostgreSQL.
+    /// </summary>
+    PostgreSQL,
+
+    /// <summary>
+    /// Azure SQL Database.
+    /// </summary>
+    AzureSQL
 }
