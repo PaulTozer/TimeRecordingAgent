@@ -182,6 +182,13 @@ public sealed class TrayIconManager : IDisposable
             try
             {
                 var dialog = new CloudSyncSettingsDialog(_settings.CloudSync);
+                
+                // Wire up the Sync Now handler
+                dialog.SyncNowRequested += async (settings) =>
+                {
+                    return await PerformCloudSyncAsync(settings);
+                };
+                
                 var result = dialog.ShowDialog();
 
                 if (result == true && dialog.WasSaved)
@@ -202,6 +209,43 @@ public sealed class TrayIconManager : IDisposable
                 _logger.LogError(ex, "Failed to show Cloud Sync settings dialog");
             }
         });
+    }
+    
+    private async Task<(int SyncedCount, string? Error)> PerformCloudSyncAsync(CloudSyncSettings settings)
+    {
+        try
+        {
+            _logger.LogInformation("Starting manual cloud sync for user {UserId}", settings.UserId);
+            
+            // Create a temporary CloudSyncService with the provided settings
+            using var loggerFactory = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug));
+            var syncService = new CloudSyncService(loggerFactory.CreateLogger<CloudSyncService>(), settings);
+            
+            // Ensure the database schema exists
+            await syncService.EnsureSchemaAsync();
+            
+            // Get entries to sync
+            var entries = _coordinator.GetRecentSamples(1000);
+            var entriesToSync = settings.SyncApprovedOnly 
+                ? entries.Where(e => e.IsApproved).ToList()
+                : entries.ToList();
+            
+            if (entriesToSync.Count == 0)
+            {
+                return (0, null);
+            }
+            
+            // Perform the sync
+            var syncedCount = await syncService.SyncEntriesAsync(entriesToSync);
+            _logger.LogInformation("Cloud sync completed: {Count} entries synced", syncedCount);
+            
+            return (syncedCount, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Cloud sync failed");
+            return (0, ex.Message);
+        }
     }
 
     private void ToggleAiSuggestions()

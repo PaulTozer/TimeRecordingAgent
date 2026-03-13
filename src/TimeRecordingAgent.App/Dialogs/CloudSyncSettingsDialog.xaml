@@ -2,9 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Cloud Sync Settings" 
-        Height="520" Width="520"
+        Height="640" Width="520"
+        MinHeight="640"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
+        ResizeMode="CanResizeWithGrip"
         ShowInTaskbar="True"
         Topmost="True">
     <Window.Resources>
@@ -140,6 +141,8 @@
         
         <!-- Buttons -->
         <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="SyncNowButton" Content="Sync Now" Width="100" Height="32" 
+                    Margin="0,0,8,0" Click="SyncNowButton_Click" ToolTip="Sync entries to cloud immediately"/>
             <Button x:Name="TestButton" Content="Test Connection" Width="120" Height="32" 
                     Margin="0,0,8,0" Click="TestButton_Click"/>
             <Button x:Name="SaveButton" Content="Save" Width="80" Height="32" 

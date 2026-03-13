@@ -62,6 +62,7 @@ When you've been working on a task for 5+ minutes, a classification dialog appea
 ## Project Structure
 - `src/TimeRecordingAgent.Core` — models, window polling, screen-state monitor, SQLite storage.
 - `src/TimeRecordingAgent.App` — WPF host, tray UX, wiring.
+- `src/TimeRecordingAgent.Api` — REST API for Foundry agent (deployed to Azure Container Apps).
 - `tests/TimeRecordingAgent.Core.Tests` — xUnit tests for parsers and session grouping.
 
 ## History Window
@@ -214,7 +215,7 @@ Want to use your firm's specific guidelines? Edit the **Instructions** field in 
 
 ## Cloud Architecture: Automatic Timesheet Sync
 
-For enterprise deployments, the tray application can automatically sync timesheet entries to an Azure cloud database. The Foundry agent then accesses entries via an Azure Function API.
+For enterprise deployments, the tray application can automatically sync timesheet entries to an Azure cloud database. The Foundry agent then accesses entries via an Azure Container Apps API.
 
 ### Architecture Diagram
 
@@ -225,11 +226,11 @@ For enterprise deployments, the tray application can automatically sync timeshee
 
     ┌───────────────┐         ┌───────────────────┐         ┌──────────────┐
     │   Desktop     │  SYNC   │  Azure Database   │  QUERY  │   Azure      │
-    │   Tray App    │────────►│  for PostgreSQL   │◄────────│   Function   │
-    │               │         │                   │         │   (API)      │
+    │   Tray App    │────────►│  for PostgreSQL   │◄────────│  Container   │
+    │               │         │                   │         │  Apps (API)  │
     └───────────────┘         └───────────────────┘         └──────────────┘
            │                                                        ▲
-           │ Local SQLite                                           │ OpenAPI
+           │ Local SQLite                                           │ REST API
            │ backup                                                 │
            ▼                                                        │
     ┌───────────────┐                                       ┌──────────────┐
@@ -249,7 +250,7 @@ For enterprise deployments, the tray application can automatically sync timeshee
 
 1. **Desktop Tray App** — Records time locally and syncs to cloud database
 2. **Azure Database for PostgreSQL** — Central storage for all users' timesheet entries
-3. **Azure Function** — REST API with OpenAPI spec for the Foundry agent
+3. **Azure Container Apps** — REST API that the Foundry agent calls to query/update entries
 4. **Microsoft Foundry Agent** — Chatbot that users interact with to verify entries
 
 ### Setting Up Cloud Sync
@@ -312,40 +313,36 @@ Settings are saved to `data/settings.json` in the application directory. The app
 | `SyncIntervalMinutes` | How often to sync (default: 15 minutes) |
 | `SyncApprovedOnly` | Only sync entries marked as approved |
 
-#### Step 3: Deploy the Azure Function
+#### Step 3: Deploy the API to Azure Container Apps
 
 ```bash
-# Navigate to the Functions project
-cd src/TimeRecordingAgent.Functions
-
-# Create a Function App in Azure
-az functionapp create \
+# Create a Container Apps environment
+az containerapp env create \
+  --name timerecording-env \
   --resource-group rg-timerecording \
-  --consumption-plan-location eastus \
-  --runtime dotnet-isolated \
-  --functions-version 4 \
-  --name timerecording-api \
-  --storage-account timerecordingstore
+  --location eastus
 
-# Configure the connection string
-az functionapp config appsettings set \
+# Deploy the API from source
+az containerapp up \
+  --name timerecording-api \
   --resource-group rg-timerecording \
-  --name timerecording-api \
-  --settings PostgreSQL__ConnectionString="Host=timerecording-db.postgres.database.azure.com;Database=timesheets;Username=adminuser;Password=YourSecurePassword123!;SSL Mode=Require"
+  --environment timerecording-env \
+  --source src/TimeRecordingAgent.Api \
+  --ingress external \
+  --target-port 8080
 
-# Set an API key for security
-az functionapp config appsettings set \
+# Set environment variables (replace with your values)
+az containerapp update \
+  --name timerecording-api \
   --resource-group rg-timerecording \
-  --name timerecording-api \
-  --settings API_KEY="your-secret-api-key-here"
-
-# Deploy the function
-func azure functionapp publish timerecording-api
+  --set-env-vars \
+    "PostgreSQL__ConnectionString=Host=timerecording-db.postgres.database.azure.com;Database=timesheets;Username=adminuser;Password=YourPassword;SSL Mode=Require" \
+    "API_KEY=your-secret-api-key-here"
 ```
 
 #### Step 4: API Endpoints
 
-The Azure Function exposes these endpoints:
+The Container App exposes these endpoints:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -359,7 +356,7 @@ All endpoints require the `x-api-key` header with your API key.
 **Example Request:**
 ```bash
 curl -H "x-api-key: your-secret-api-key" \
-  "https://timerecording-api.azurewebsites.net/api/timesheets/user@company.com/2024-01-15"
+  "https://timerecording-api.YOUR-ENV.azurecontainerapps.io/api/timesheets/user@company.com/2024-01-15"
 ```
 
 **Example Response:**
@@ -384,12 +381,23 @@ curl -H "x-api-key: your-secret-api-key" \
 1. In Microsoft Foundry, go to your agent's configuration
 2. Add a new **Tool** of type **OpenAPI**
 3. Configure the tool:
-   - **Name**: `Timesheet API`
-   - **Description**: `Retrieves and updates timesheet entries for verification`
-   - **Spec URL**: Your Function App URL + `/api/openapi.json`
-   - **Authentication**: API Key → Header → `x-api-key` → your API key
+   - **Name**: `TimesheetAPI`
+   - **Description**: `Timekeeping API`
+   - **Authentication method**: `Connection`
+   - **Connection**: `Add a new connection`
+   - **Credential**:
+     | Field | Value |
+     |-------|-------|
+     | **Enter key** | `x-api-key` |
+     | **Enter value** | Your API key (e.g., `tr-secure-key-2024`) |
+   - **OpenAPI 3.0+ schema**: Paste the schema from your API's `/openapi.json` endpoint, or enter the URL directly:
+     ```
+     https://timerecording-api.YOUR-ENV.azurecontainerapps.io/openapi.json
+     ```
 
-4. Update the agent's **Instructions** to reference the tool:
+4. Click **Create tool** to save the configuration
+
+5. Update the agent's **Instructions** to reference the tool:
 
 ```
 You are a legal billing compliance assistant with access to the Timesheet API.
@@ -438,6 +446,6 @@ CREATE TABLE timesheet_entries (
 | API authentication | Always set a strong API_KEY in production |
 | Network access | Restrict PostgreSQL firewall to Azure services only |
 | User data | Consider encrypting sensitive fields at rest |
-| CORS | Configure Function App CORS for your Foundry domain |
+| Container Apps | Enable ingress restrictions if needed |
 
 

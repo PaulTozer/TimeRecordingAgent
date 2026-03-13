@@ -11,6 +11,11 @@ public partial class CloudSyncSettingsDialog : Window
 {
     private readonly CloudSyncSettings _settings;
     private bool _showingPassword = false;
+    
+    /// <summary>
+    /// Event raised when user clicks Sync Now button.
+    /// </summary>
+    public event Func<CloudSyncSettings, Task<(int SyncedCount, string? Error)>>? SyncNowRequested;
 
     public CloudSyncSettingsDialog(CloudSyncSettings settings)
     {
@@ -270,6 +275,48 @@ public partial class CloudSyncSettingsDialog : Window
         }
         
         StatusText.Text = message;
+    }
+
+    private async void SyncNowButton_Click(object sender, RoutedEventArgs e)
+    {
+        var settings = UpdatedSettings;
+        
+        if (!settings.IsConfigured)
+        {
+            ShowTestResult(false, "Please fill in all required fields first.");
+            return;
+        }
+
+        if (SyncNowRequested == null)
+        {
+            ShowTestResult(false, "Sync handler not configured. Save settings first and try from the app.");
+            return;
+        }
+
+        SyncNowButton.IsEnabled = false;
+        SyncNowButton.Content = "Syncing...";
+
+        try
+        {
+            var (syncedCount, error) = await SyncNowRequested(settings);
+            if (error != null)
+            {
+                ShowTestResult(false, $"❌ Sync failed: {error}");
+            }
+            else
+            {
+                ShowTestResult(true, $"✅ Sync complete! {syncedCount} entries synced to cloud.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowTestResult(false, $"❌ Sync error: {ex.Message}");
+        }
+        finally
+        {
+            SyncNowButton.IsEnabled = true;
+            SyncNowButton.Content = "Sync Now";
+        }
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
